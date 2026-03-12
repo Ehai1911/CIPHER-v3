@@ -664,18 +664,35 @@ td strong{color:var(--txt)}
       addHelperMessage(text, 'user');
       input.value = '';
       
-      setTimeout(() => {
-        const response = getHelperResponse(text);
+      // Показываем индикатор печатания
+      addHelperMessage('🤖 печатает...', 'bot-typing');
+      
+      // Отправляем запрос к OpenAI API через Netlify функцию
+      getHelperResponse(text).then(response => {
+        // Удаляем индикатор печатания
+        const msgs = document.getElementById('helperMessages');
+        const lastMsg = msgs.lastChild;
+        if(lastMsg && lastMsg.textContent.includes('печатает')) {
+          lastMsg.remove();
+        }
         addHelperMessage(response, 'bot');
-      }, 800);
+      }).catch(error => {
+        // Если API не доступен, используем локальные ответы
+        const msgs = document.getElementById('helperMessages');
+        const lastMsg = msgs.lastChild;
+        if(lastMsg && lastMsg.textContent.includes('печатает')) {
+          lastMsg.remove();
+        }
+        addHelperMessage(getLocalHelperResponse(text), 'bot');
+      });
     }
 
     function addHelperMessage(text, type) {
       const msgs = document.getElementById('helperMessages');
       const msg = document.createElement('div');
-      msg.className = `msg msg-${type === 'bot' ? 'bot' : ''}`;
+      msg.className = `msg msg-${type === 'bot' ? 'bot' : type === 'bot-typing' ? 'bot' : ''}`;
       
-      if(type === 'bot') {
+      if(type === 'bot' || type === 'bot-typing') {
         msg.innerHTML = `<div class="msg-avatar">🤖</div><div class="msg-text">${text}</div>`;
       } else {
         msg.innerHTML = `<div style="flex:1;text-align:right"><div style="background:rgba(184,255,60,.15);border-right:2px solid var(--acid);padding:8px;border-radius:6px;color:var(--txt);display:inline-block;max-width:70%">${text}</div></div>`;
@@ -686,7 +703,24 @@ td strong{color:var(--txt)}
       msgs.scrollTop = msgs.scrollHeight;
     }
 
-    function getHelperResponse(question) {
+    async function getHelperResponse(question) {
+      try {
+        const response = await fetch('/.netlify/functions/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: question })
+        });
+        
+        if(!response.ok) throw new Error('API error');
+        const data = await response.json();
+        return data.answer || 'Не смог обработать вопрос';
+      } catch (e) {
+        // Fallback на локальные ответы если API недоступна
+        throw e;
+      }
+    }
+
+    function getLocalHelperResponse(question) {
       const q = question.toLowerCase();
       
       // Поиск по ключевым словам
